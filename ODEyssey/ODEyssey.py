@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import inspect
+from sympy import symbols, diff, solve, lambdify
 
 
 def eulers_method(
@@ -17,7 +18,7 @@ def eulers_method(
         verbose: bool = False,
         dark_mode: bool = True
     ) -> Tuple[list[float], list[float]]:
-    '''
+    """
     This function performs Euler's method calculation.
 
     Args:
@@ -41,7 +42,7 @@ def eulers_method(
             return 2*x
         
         x_values, y_values = eulers_method(0, 5, 0.1, equation, differential_equation, plot_trajectory = True, verbose = True)
-    '''
+    """
     
     if step_size <= 0:
         raise ValueError('Step size must be above 0')
@@ -879,3 +880,260 @@ def riemann(x_start: float,
                 print(f'An error occured while plotting the Riemann sum graph: {e}')
     
     return total_sum
+
+
+def linear_stability_analysis(
+    differential_equation: Callable[[np.ndarray], np.ndarray],
+    variable: str,
+    plot: bool = True,
+    axes_labels: Tuple[str, str] = ("X", "f(X)"),
+    tangent: bool = True,
+    arrow_head_size: float = 20,
+    dark_mode: bool = True,
+    title: str = None,
+    ) -> Tuple:
+    """
+    This function performs a linear stability analysis of a given differential equation by calculating its equilibrium points,
+    analyzing their stability, and optionally plotting the results.
+
+    Args:
+        differential_equation (Callable[[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray]]): Function representing the differential equation.
+        variable (str): the variable with respect to which the equilibrium points are calculated.
+        plot (bool, optional): Determines whether to plot or not. Defaults to True.
+        axes_labels(Tuple[str, str], optional): If given, the axes labels for the x and y axes. Defaults to "X" and "f(X)".
+        tangent (bool, optional): If True, plots the tangent lines at equilibrium points. Defaults to True.
+        arrow_head_size (float, optional): Size of the arrowheads in the plot. Defaults to 20.
+        dark_mode (bool, optional): boolean statement determining whether the plot style is dark or not (default style). Defaults to True.
+        title (str, optional): If given, the plot title. Defaults to None.
+        
+    Returns:
+        Tuple: A tuple containing:
+            - list: A list of the coordinates of the equilibrium points.
+            - plt: The plot of the linear stability analysis (if plotting is set to True).
+
+        list: A list with the coordinates of the equilibrium points.
+        plt: A plot with the 3D trajectory and an optional vector field.
+   
+    Example:
+        X = symbols('X')  # Symbolic variable (be sure to call symbols(), otherwise it won't work)
+        differential_eq = 2 * X*(1-X/5)*(X/1 -1)  # Example dX/dt
+        linear_stability_analysis(differential_eq, X)
+    """
+    try:
+        # Solve df(X)/dX (variables can change, example function)
+        differentiated_function = diff(differential_equation, variable)
+        print(differentiated_function)
+
+        # Find the equilibrium points
+        EP = solve(differential_equation, variable)
+
+        # Filter to keep only real equilibrium points
+        real_EP = [point.evalf() for point in EP if point.is_real]
+
+        # Analyze stability at each equilibrium point
+        stability_info = []
+        differential_func_numeric = lambdify(variable, differentiated_function)
+        for point in real_EP:
+            slope = differential_func_numeric(float(point))
+            stability = "Stable" if slope < 0 else "Unstable" if slope > 0 else "Semi-stable"
+            stability_info.append((point, slope, stability))
+            print(f"Equilibrium point {point}: Slope = {slope}, Stability = {stability}")
+
+        if plot:
+            try:
+                # Set dark_mode
+                if dark_mode:
+                    plt.style.use('dark_background')
+                    color = 'white'
+                else:
+                    plt.style.use('default')
+                    color = 'black'
+
+                # Set figure size
+                plt.figure(figsize=(10, 6))
+
+                # Calculate a bezel and min and max values to dynamically account for plot-size
+                plotting_bezel = float(abs(max(real_EP) - min(real_EP)) * 0.05)
+                min_x = float(min(real_EP) - plotting_bezel)
+                max_x = float(max(real_EP) + plotting_bezel)
+
+                # Calculate the x-values to plot
+                if len(real_EP) > 1:
+                    x = np.linspace(min_x, max_x, 1000)
+                else:
+                    x = np.linspace(-0.5, 0.5, 1000)
+
+                # Derivative values
+                differential_equation_num = lambdify(variable, differential_equation)
+                x_prime = differential_equation_num(x)
+                
+                # Plot the line first
+                plt.plot(x, x_prime, color=color, linewidth=2, zorder=1)
+                plt.hlines(0, min_x - 0.5, max_x + 0.5, color=color, linewidth=0.5, zorder=1)
+                if min_x <= 0:
+                    plt.axvline(x=0, color=color, linewidth=0.5, zorder=1)
+
+                # Plot equilibrium points and their stability
+                for point, slope, stability in stability_info:
+                    if dark_mode:
+                        plt.scatter([float(point)], 0, color="white" if stability == "Stable" else "black" if stability == "Unstable" else "red", 
+                                    label=stability, edgecolors='white', zorder=3)
+                    else:
+                        plt.scatter([float(point)], 0, color="black" if stability == "Stable" else "white" if stability == "Unstable" else "red", 
+                                    label=stability, edgecolors='black', zorder=3)
+
+                    # Plot tangent line
+                    if tangent:
+                        x_tangent = np.linspace(float(point) - plotting_bezel*2, float(point) + plotting_bezel*2, 1000)
+                        tangent_line = slope * (x_tangent - float(point))
+                        plt.plot(x_tangent, tangent_line, linestyle="solid", color="red", linewidth=2, zorder=2)
+
+                # Maximum for vector length
+                max_arrow_length = (max_x - min_x) * 0.1
+
+                # Sets a default arrow length to ensure right plotting with one EP
+                arrow_length = 0.1
+
+                # Plot the vectors                
+                for i in range(len(real_EP)-1):
+                    point1 = float(real_EP[i])
+                    point2 = float(real_EP[i+1])
+                    midpoint = (point1 + point2) / 2
+                    vector_size = differential_equation_num(midpoint)
+                    x_difference = abs(point2 - point1)
+
+                    # Arrow length
+                    if len(real_EP) > 1:
+                        arrow_length = x_difference * 0.25
+
+                    # Plot the arrows
+                    if vector_size > 0:
+                        plt.annotate('', 
+                                    xy=(midpoint + arrow_length / 2, 0), 
+                                    xytext=(midpoint - arrow_length / 2, 0),
+                                    arrowprops=dict(arrowstyle='->', color='green', lw=2, 
+                                                    shrinkA=0, shrinkB=0, 
+                                                    mutation_scale=arrow_head_size))
+                    elif vector_size < 0:
+                        plt.annotate('', 
+                                    xy=(midpoint - arrow_length / 2, 0), 
+                                    xytext=(midpoint + arrow_length / 2, 0),
+                                    arrowprops=dict(arrowstyle='->', color='green', lw=2, 
+                                                    shrinkA=0, shrinkB=0, 
+                                                    mutation_scale=arrow_head_size))
+
+                # Plot the outermost vectors
+                if len(real_EP) > 1:
+                    first_point = float(real_EP[0])
+                    first_vector_size = differential_equation_num(first_point - 0.1)
+                    if first_vector_size > 0:
+                        plt.annotate('',
+                                    xy=(first_point - 0.5, 0), 
+                                    xytext=(first_point - 0.5 - arrow_length, 0),
+                                    arrowprops=dict(arrowstyle='->', color='green', lw=2, 
+                                                    shrinkA=0, shrinkB=0, 
+                                                    mutation_scale=arrow_head_size))
+                    if first_vector_size < 0:
+                        plt.annotate('',
+                                    xy=(first_point - 1, 0), 
+                                    xytext=(first_point - 1 + arrow_length, 0),
+                                    arrowprops=dict(arrowstyle='->', color='green', lw=2, 
+                                                    shrinkA=0, shrinkB=0, 
+                                                    mutation_scale=arrow_head_size))
+
+                    last_point = float(real_EP[-1])
+                    last_vector_size = differential_equation_num(last_point + 0.1)
+                    if last_vector_size > 0:
+                        plt.annotate('',
+                                    xy=(last_point + 1, 0),
+                                    xytext=(last_point + 1 + arrow_length, 0),
+                                    arrowprops=dict(arrowstyle='->', color='green', lw=2, 
+                                                    shrinkA=0, shrinkB=0,
+                                                    mutation_scale=arrow_head_size))
+                    elif last_vector_size < 0:
+                        plt.annotate('',
+                                    xy=(last_point + 0.5, 0),
+                                    xytext=(last_point + 0.5 + arrow_length, 0),
+                                    arrowprops=dict(arrowstyle='->', color='green', lw=2,
+                                                    shrinkA = 0, shrinkB=0,
+                                                    mutation_scale=arrow_head_size))
+                
+                # Plot arrows or vectors for the single equilibrium case
+                if len(real_EP) == 1:
+                    single_point = float(real_EP[0])
+                    vector_size = differential_equation_num(single_point - 0.1)  # Evaluate slightly to the left
+
+                    # Plot an arrow to the left of the point
+                    if vector_size < 0:
+                        plt.annotate('',
+                                    xy=(single_point - 0.5, 0),
+                                    xytext=(single_point - 0.5 + arrow_length, 0),
+                                    arrowprops=dict(arrowstyle='->', color='green', lw=2, mutation_scale=arrow_head_size))
+                    elif vector_size > 0:
+                        plt.annotate('',
+                                    xy=(single_point - 0.5, 0),
+                                    xytext=(single_point - 0.5 - arrow_length, 0),
+                                    arrowprops=dict(arrowstyle='->', color='green', lw=2, mutation_scale=arrow_head_size))
+
+                    vector_size_right = differential_equation_num(single_point + 0.1)  # Evaluate slightly to the right
+
+                    # Plot an arrow to the right of the point
+                    if vector_size_right > 0:
+                        plt.annotate('',
+                                    xy=(single_point + 0.5, 0),
+                                    xytext=(single_point + 0.5 + arrow_length, 0),
+                                    arrowprops=dict(arrowstyle='->', color='green', lw=2, mutation_scale=arrow_head_size))
+                    elif vector_size_right < 0:
+                        plt.annotate('',
+                                    xy=(single_point + 0.5, 0),
+                                    xytext=(single_point + 0.5 - arrow_length, 0),
+                                    arrowprops=dict(arrowstyle='->', color='green', lw=2, mutation_scale=arrow_head_size))
+
+                # Ensure the plot covers a reasonable range for visualization
+                if len(real_EP) == 1:
+                    min_x = single_point - 0.5
+                    max_x = single_point + 0.5
+                    x = np.linspace(min_x, max_x, 1000)
+                    x_prime = differential_equation_num(x)
+                    plt.plot(x, x_prime, color=color, linewidth=2, zorder=1)
+                    plt.hlines(0, min_x - 0.1, max_x + 0.1, color=color, linewidth=0.5, zorder=1)
+
+                # Set axis limits for better visibility
+                if len(real_EP) > 1:
+                    plt.xlim(min_x - 1.5, max_x + 1.5)
+                else:
+                    plt.xlim(min_x, max_x)
+                plt.ylim(min(x_prime) - 0.1, max(x_prime) + 0.1)
+
+                # Remove the bezel (frame) around the plot
+                plt.gca().spines['top'].set_visible(False)
+                plt.gca().spines['right'].set_visible(False)
+                plt.gca().spines['left'].set_visible(False)
+                plt.gca().spines['bottom'].set_visible(False)
+
+                # Remove the ticks
+                plt.yticks([])
+                plt.xticks([])
+
+                # plot the y-label
+                plt.ylabel(axes_labels[1])
+
+                # Position the x-axis label at the end of the line
+                if len(real_EP) == 1:
+                    plt.text(max_x + 0.15, 0, axes_labels[0], ha='center', va='center', fontsize=10)
+                else:
+                    plt.text(max_x + 1.55, 0, axes_labels[0], ha='center', va='center', fontsize=10)
+
+                # Set the title
+                if title:
+                    plt.title(title, color = color, fontsize = 15)
+                else:
+                    plt.title(f'Linear Stability Analysis of: {differential_equation}', color = color, fontsize = 15)
+                
+                plt.tight_layout()
+                plt.show()
+
+            except Exception as e:
+                print(f'An error occured while plotting the linear stability analysis: {e}')
+    except Exception as e:
+        print(f'An error occurred while calculating and/or plotting the equilibrium points: {e}')
