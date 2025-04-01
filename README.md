@@ -117,4 +117,4 @@ Examples are given in the function descriptions (accessible through help(ode.fun
 Contributions are welcome! Please raise an issue or fork this repository and submit pull requests to add new features or fix bugs.
 
 ## License
-This project is licensed under the MIT License.
+This project is licensed under the GNU General Public License.
