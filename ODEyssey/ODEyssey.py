@@ -4,8 +4,9 @@ from scipy.integrate import odeint
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+from matplotlib.markers import MarkerStyle
 import inspect
-from sympy import symbols, diff, solve, lambdify
+from sympy import symbols, Eq, diff, solve, lambdify
 
 
 def eulers_method(
@@ -104,6 +105,7 @@ def plot_vector_field(
         gradient: bool = True,
         grid: bool = False,
         dark_mode: bool = True,
+        vector_colour: str = None,
         title: str = "",
         show: bool = True
     ) -> None:
@@ -114,12 +116,12 @@ def plot_vector_field(
         equations Callable[[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray]]: Function representing the two equations.
         x_grid (Tuple[float, float]): Start and end values for the grid on the x-axis.
         y_grid (Tuple[float, float]): Start and end values for the grid on the y-axis.
-        vector_colour (str, optional): If given, use that colour. Defaults to "black".
         plot_points(int, optional): If given, the number of vectors plotted. Defaults to 20 points.
         axes_labels(Tuple[str, str], optional): If given, the axes labels for the x and y axes. Defaults to "x" and "y".
         gradient (bool, optional): boolean statement determining whether a gradient of the vector size is shown or not. Defaults to True.
         grid (bool, optional): boolean statement determining whether a grid is shown or not. Defaults to False.
         dark_mode (bool, optional): boolean statement determining whether the plot style is dark or not (ggplot style). Defaults to True.
+        vector_colour (str, optional): If given, use that colour. Defaults to None.
         title (str, optional): If given, the plot title. Defaults to emtpy ("").
         show (bool, optional): If True then show the plot, otherwise don't show it. This is used since the function is called in
             other functions as well, giving the necessity for this option. Defaults to True.
@@ -148,10 +150,8 @@ def plot_vector_field(
         title_color = 'white' if dark_mode else 'black'
 
         # To still be able to see the vectors with these exact conditions
-        if gradient:
-            vector_colour = 'black' if dark_mode else 'white'
-        else:
-            vector_colour = 'white' if dark_mode else 'black'
+        if not vector_colour:
+            vector_colour = 'black' if dark_mode or gradient else 'white'
 
         # Gradient plot
         if gradient == True:
@@ -171,7 +171,6 @@ def plot_vector_field(
             title = f"2D vector field superimposed on {axes_labels[0]}-{axes_labels[1]} state space"
             plt.title(title, pad = 15, color = title_color)
         
-        #plt.title(title, pad = 15, color = title_color)
         plt.grid(grid) # Plots the grid if set to True
         plt.tight_layout()
         plt.gca().set_aspect('equal')
@@ -934,7 +933,7 @@ def linear_stability_analysis(
         stability_info = []
         differential_func_numeric = lambdify(variable, differentiated_function)
         for point in real_EP:
-            slope = differential_func_numeric(float(point))
+            slope = (float(point))
             stability = "Stable" if slope < 0 else "Unstable" if slope > 0 else "Semi-stable"
             stability_info.append((point, slope, stability))
             print(f"Equilibrium point {point}: Slope = {slope}, Stability = {stability}")
@@ -1137,3 +1136,163 @@ def linear_stability_analysis(
                 print(f'An error occured while plotting the linear stability analysis: {e}')
     except Exception as e:
         print(f'An error occurred while calculating and/or plotting the equilibrium points: {e}')
+
+
+def nullcline_plot(
+    equations,
+    vector_field = True,
+    title: str = 'Nullclines of 2D differential system with equilibrium points',
+    grid: bool = False,
+    axes_labels: Tuple[str, str] = ('x','y'),
+    dark_mode: bool = False
+    ) -> None:
+    """
+    This function plots nullclines, equilibrium points and an optional vector field of a 2D system.
+
+    Args:
+        equations (Callable[[Tuple[float, float]], Tuple[float, float]]):
+            Function representing the 2D system.
+        vector_field (bool, optional): If True, plots the vector field of the system. Defaults to True.
+        grid (bool, optional): Boolean statement determining whether a grid is shown or not. Defaults to False.
+        axes_labels (Tuple[str, str], optional): Labels for the x and y axes. Defaults to ('x', 'y').
+        title (str, optional): If given, the plot title. Defaults to empty ("").
+        dark_mode (bool, optional): Boolean statement determining whether the plot style is dark or not. Defaults to True.
+
+    Returns:
+        None: Displays a plot with the nullclines and equilibrium points (and an optional vector field).
+    
+    Example:
+        def equations(state):
+            d_val, m_val = state
+            dd_dt = 3*d_val - m_val*d_val - d_val**2
+            dm_dt = 2*m_val - 0.5*m_val*d_val - m_val**2
+            return dd_dt, dm_dt
+
+        nullcline_plot(equations, title='Nullcline Plot')
+    """
+    try:
+        d, m = symbols('d m') # I define it like this now, can also do global
+
+        nullcline_one = solve(Eq(equations((d, m))[0], 0), d)
+        nullcline_two = solve(Eq(equations((d, m))[1], 0), m)
+
+        # Solve the system of equations
+        EPs = solve([equations((d, m))[0], equations((d, m))[1]], (d, m))
+
+        max_d = int(max(EP[0] for EP in EPs))
+        max_m = int(max(EP[1] for EP in EPs))
+        min_d = int(min(EP[0] for EP in EPs))
+        min_m = int(min(EP[1] for EP in EPs))
+
+        d_range = max_d - min_d
+        m_range = max_m - min_m
+
+        d_extension = d_range * 0.05
+        m_extension = m_range * 0.05
+
+        d_min_extended = min_d - d_extension
+        d_max_extended = max_d + d_extension
+        m_min_extended = min_m - m_extension
+        m_max_extended = max_m + m_extension
+
+        if dark_mode:
+            plt.style.use('dark_background')
+            color1 = 'white'
+            color2 = 'black'
+        else:
+            plt.style.use('default')
+            color1 = 'black'
+            color2 = 'white'
+
+        for nullcline_1 in nullcline_one:
+            if nullcline_1.is_number:
+                plt.axhline(y=nullcline_1, color='blue', xmin = 0, xmax =1)
+            else:
+                function = lambdify(m, nullcline_1)
+                m_values = np.linspace(m_min_extended, m_max_extended, 100)
+                plt.plot(m_values, function(m_values), color='blue')
+
+        for nullcline in nullcline_two:
+            if nullcline.is_number:
+                plt.axvline(x=nullcline, color='red', ymin = 0, ymax = 1)
+            else:
+                function = lambdify(d, nullcline)
+                d_values = np.linspace(d_min_extended, d_max_extended, 100)
+                plt.plot(function(d_values), d_values, color='red')
+
+        for EP in EPs:
+            d_val, m_val = EP
+
+            perturbation = [0.01, -0.01]
+            stability_info = []
+
+            for perturb in perturbation:
+                # Check above
+                above_dd = equations((d_val + perturb, m_val))[0]
+                above_dm = equations((d_val, m_val + perturb))[1]
+                # Below
+                below_dd = equations((d_val - perturb, m_val))[0]
+                below_dm = equations((d_val, m_val - perturb))[1]
+
+                # Append
+                stability_info.append(((above_dd, above_dm), (below_dd, below_dm)))
+
+            above_dd, above_dm = stability_info[0][0]
+            below_dd, below_dm = stability_info[1][0]
+
+            # Check stability in the d direction
+            stable_d = above_dd < 0 and below_dd > 0
+            unstable_d = above_dd > 0 and below_dd < 0
+
+            # Check stability in the m direction
+            stable_m = above_dm < 0 and below_dm > 0
+            unstable_m = above_dm > 0 and below_dm < 0
+
+            # Determine overall stability
+            if stable_d and stable_m:
+                print(f'Stable equilibrium point: {EP}')
+                plt.scatter(EP[1], EP[0], color = color1, zorder=2)
+            elif unstable_d and unstable_m:
+                print(f'Unstable equilibrium point: {EP}')
+                plt.scatter(EP[1], EP[0], color = color2, edgecolors=color1, zorder=2)
+            elif (stable_d and unstable_m) or (unstable_d and stable_m):
+                print(f'Saddle point: {EP}')
+                plt.scatter(EP[1], EP[0], color = color2, edgecolors=color1, zorder=2)
+                plt.scatter(EP[1], EP[0], color = color1, marker = MarkerStyle('o', fillstyle='bottom'), zorder=2) # Fill it half
+            else:
+                print(f'Semi-stable equilibrium point: {EP}')
+                plt.scatter(EP[1], EP[0], color = 'salmon', zorder=2)
+
+        # Set the plot limits to the original equilibrium point ranges.
+        plt.xlim(m_min_extended, m_max_extended)
+        plt.ylim(d_min_extended, d_max_extended)
+        
+        # Optional vector field, taking the dimensions of the trajectory as the x_grid and y_grid. Show is set to False in plot_vector_field to prevent multiple outputs. 
+        min_x, max_x = plt.xlim()
+        min_y, max_y = plt.ylim()
+        
+        if vector_field:
+            def vector_field_func(x, y):
+                return equations((x, y))
+
+            try:
+                plot_vector_field(vector_field_func,
+                                x_grid=(min_x, max_x),
+                                y_grid=(min_y, max_y),
+                                show = False,
+                                gradient = False,
+                                dark_mode = False,
+                                grid = True,
+                                vector_colour = 'green',
+                                plot_points=10
+                                )
+            except Exception as e:
+                print(f'Something went wrong while plotting the vector field: {e}')
+
+        plt.xlabel(axes_labels[0])
+        plt.ylabel(axes_labels[1])
+        plt.grid(grid)
+        plt.title(title, color = color1)
+        plt.show()
+    except Exception as e:
+        print(f'An error occured while plotting the nullcline graph: {e}')
