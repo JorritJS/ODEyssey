@@ -574,16 +574,16 @@ def timeseries(
 
     Args:
         functions (Callable[[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray]]): Function representing the equations.
-        X_start (float): starting value for the time series (time value, i.e. the starting value on the left side of the plot).
-        x_stop (float): end value for the trajectory (time value, i.e. the end value on the right side of the plot).
-        n_step (float): size of the step we take for odeint function (comparable to Euler's step size)
+        X_start (float): Starting value for the time series (time value, i.e. the starting value on the left side of the plot).
+        x_stop (float): End value for the trajectory (time value, i.e. the end value on the right side of the plot).
+        n_step (float): Number of steps we take for odeint function
         initial_state (List[float]): Initial state vector.
         interventions (List[Dict[str, float]], optional): List of interventions. Each intervention is a dictionary with 'time', 'type', and 'magnitude'.
         title (str, optional): If given, the plot title. Defaults to emtpy ("").
         axes_labels(Tuple[str, str], optional): If given, the axes labels for the x and y axes. Defaults to "x" and "y".
         line_colors (List[str], optional): Colors for the lines. Defaults to Viridis colours.
-        grid (bool, optional): boolean statement determining whether a grid is shown. Defaults to True.
-        dark_mode (bool, optional): boolean statement determining whether the plot style is dark or not (default style). Defaults to True.
+        grid (bool, optional): Boolean statement determining whether a grid is shown. Defaults to True.
+        dark_mode (bool, optional): Boolean statement determining whether the plot style is dark or not (default style). Defaults to True.
 
     Returns:
         plt: A plot with the timeseries of the given equations
@@ -882,14 +882,14 @@ def riemann(x_start: float,
 
 
 def linear_stability_analysis(
-    differential_equation: Callable[[np.ndarray], np.ndarray],
-    variable: str,
-    plot: bool = True,
-    axes_labels: Tuple[str, str] = ("X", "f(X)"),
-    tangent: bool = True,
-    arrow_head_size: float = 20,
-    dark_mode: bool = True,
-    title: str = None,
+        differential_equation: Callable[[np.ndarray], np.ndarray],
+        variable: str,
+        plot: bool = True,
+        axes_labels: Tuple[str, str] = ("X", "f(X)"),
+        tangent: bool = True,
+        arrow_head_size: float = 20,
+        dark_mode: bool = True,
+        title: str = None
     ) -> Tuple:
     """
     This function performs a linear stability analysis of a given differential equation by calculating its equilibrium points,
@@ -1296,3 +1296,97 @@ def nullcline_plot(
         plt.show()
     except Exception as e:
         print(f'An error occured while plotting the nullcline graph: {e}')
+
+
+def bifurcation_diagram(
+        differential_equation: Callable[[np.ndarray], np.ndarray],
+        variable: str,
+        bifurcation_symbol: str,
+        bifurcation_start: float,
+        bifurcation_end: float,
+        n_step: float = 1000,
+        axes_labels: Tuple[str, str] = ('x','y'),
+        dark_mode: bool = True,
+        grid: bool = False,
+        title: str = ''
+    ) -> None:
+    '''
+    This function creates a bifurcation diagram of a given differential equation by calculating its equilibrium points and
+    analyzing their stability.
+
+    Args:
+        differential_equation (Callable[[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray]]): Function representing the differential equation.
+        variable (str): The variable with respect to which the equilibrium points are calculated.
+        bifurcation_symbol (str): The variable with respect to which the bifurcation is done.
+        bifurcation_start (float): Starting value of the bifurcation symbol.
+        bifurcation_end (float): End value of the bifurcation symbol.
+        n_step (float): Number of values for the bifurcation we plot. Defaults to 1000.      
+        axes_labels(Tuple[str, str], optional): If given, the axes labels for the x and y axes. Defaults to "x" and "y".
+        dark_mode (bool, optional): boolean statement determining whether the plot style is dark or not (default style). Defaults to True.
+        grid (bool, optional): Boolean statement determining whether a grid is shown or not. Defaults to False.
+        title (str, optional): If given, the plot title. Defaults to None.
+        
+    Returns:
+        plt: A plot with the bifurcation diagram.
+
+    Example:
+        X, a = symbols('X a')
+        differential_eq = 2 * X * (1 - X / 5) * (X / a - 1)
+        bifurcation_diagram(differential_eq, variable=X, bifurcation_symbol=a, bifurcation_start=0.1, bifurcation_end=20)
+    '''
+    try:
+        # Get the values we check equilibrium points for
+        bifurcation_values = np.linspace(bifurcation_start, bifurcation_end, n_step)
+        if 0 in bifurcation_values:
+            bifurcation_values = bifurcation_values[bifurcation_values != 0]
+            print("bifurcation_start cannot be 0 as this will lead to division by 0, skipping 0 in bifurcation_values.")
+
+        # Initialize equilibrium points list
+        EP_stability_info = []
+
+        # Analyze EPs and stability for each bifurcation value
+        for bifurcation in bifurcation_values:
+            # Substitute the bifurcation parameter into the equation
+            substituted_equation = differential_equation.subs(bifurcation_symbol, bifurcation)
+            differentiated_function = diff(substituted_equation, variable)
+            equilibrium_points = solve(substituted_equation, variable)
+
+            # Filter out the non-real equilibrium points
+            real_points = [point.evalf() for point in equilibrium_points if point.is_real]
+
+            # Analyze stability by first putting the equation into the right format
+            differentiated_function_numeric = lambdify(variable, differentiated_function)
+
+            for point in real_points:
+                slope = differentiated_function_numeric(point)
+                stability = "Stable" if slope < 0 else "Unstable" if slope > 0 else "Semi-stable"
+                EP_stability_info.append((bifurcation, point, stability))
+
+        # Get the data ready for plotting
+        stable_points = [(bifurcation_point, stability_point) for bifurcation_point, stability_point, stability in EP_stability_info if stability == "Stable"]
+        unstable_points = [(bifurcation_point, stability_point) for bifurcation_point, stability_point, stability in EP_stability_info if stability == "Unstable"]
+        semi_stable_points = [(bifurcation_point, stability_point) for bifurcation_point, stability_point, stability in EP_stability_info if stability == "Semi-stable"]
+
+        # Separate the coordinates
+        stable_bifurcation, stable_equilibrium = zip(*stable_points) if stable_points else ([], [])
+        unstable_bifurcation, unstable_equilibrium = zip(*unstable_points) if unstable_points else ([], [])
+        semi_stable_bifurcation, semi_stable_equilibrium = zip(*semi_stable_points) if semi_stable_points else ([], [])
+
+        if dark_mode:
+            plt.style.use('dark_background')
+            color = 'white'
+        else:
+            plt.style.use('default')
+            color = 'black'
+
+        # Plot the diagram
+        plt.scatter(stable_bifurcation, stable_equilibrium, color='blue', label='Stable', s=10)
+        plt.scatter(unstable_bifurcation, unstable_equilibrium, color='red', label='Unstable', s=10)
+        plt.scatter(semi_stable_bifurcation, semi_stable_equilibrium, color='orange', label='Semi-stable', s=10)
+        plt.xlabel(axes_labels[0], color=color)
+        plt.ylabel(axes_labels[1], color=color)
+        plt.grid(grid)
+        plt.title(title, color=color)
+        plt.show()
+    except Exception as e:
+        print(f'An error occured while plotting the bifurcation diagram; {e}')
