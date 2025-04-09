@@ -109,6 +109,7 @@ ode.plot_trajectories_3d(lorenz, 0, 40, 0.01, initial_state=initial_state, param
 - Trajetory plots (2D and 3D)
 - Timeseries (with optional interventions)
 - Linear stability analysis
+- Bifurcation diagram (2D)
 
 All plots can be customized for different styles.
 Examples are given in the function descriptions (accessible through help(ode.functionName)), and a Jupyter notebook is available under "/examples/".
