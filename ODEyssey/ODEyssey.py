@@ -17,7 +17,10 @@ def eulers_method(
         differential_equation: Callable[[float], float],
         plot_trajectory: bool = False,
         verbose: bool = False,
-        dark_mode: bool = True
+        dark_mode: bool = True,
+        grid: bool = False,
+        axes_labels: Tuple[str, str] = ("x", "y"),
+        title: str = ""
     ) -> Tuple[list[float], list[float]]:
     """
     This function performs Euler's method calculation.
@@ -31,7 +34,10 @@ def eulers_method(
         plot_trajectory (bool, optional): If True, plot the trajectory. Defaults to False.
         verbose (bool, optional): If True, prints intermediate values. Defaults to False.
         dark_mode (bool, optional): If True, set the plot style to dark. Defaults to True.
-        
+        grid (bool, optional): boolean statement determining whether a grid is shown or not. Defaults to False.
+        axes_labels(Tuple[str, str], optional): If given, the axes labels for the x and y axes. Defaults to "x" and "y".
+        title (str, optional): If given, the plot title. Defaults to emtpy ("").
+
     Returns:
         Tuple[List[float], List[float]]: Two lists containing x and y values from Euler's method.
         
@@ -54,25 +60,39 @@ def eulers_method(
     # The number of steps we use in our calculation
     steps = int((x_end - x_start) / step_size)
 
-    # Starting values of both x and y
-    x = x_start
-    y = equation(x_start) # Calculate with the equation since the value of y is function(x) where function(x) is our equation
+    # Preallocate arrays with the correct size (makes computation more efficient)
+    solution_x_values = np.empty(steps + 1)
+    solution_y_values = np.empty(steps + 1)
 
-    # Initialize lists for output values, the first value we give since it will not be added in the for loop
-    solution_x_values = [x_start]
-    solution_y_values = [equation(x_start)]
+    # Initialize the first element since it will not be added in the for loop
+    solution_x_values[0] = x_start
+    solution_y_values[0] = equation(x_start) # Calculate with the equation since the value of y is function(x) where function(x) is our equation
+
+    # Starting values of both x and y
+    x, y = x_start, solution_y_values[0]
+
+    # Define them locally to optimize the code
+    ss = step_size # Local alias
+    de = differential_equation # Local alias
 
     # Here we calculate our values by going over all the values in a step-wise manner
-    for _ in range(steps):
-        x = x + step_size # Update the x value; can be x += step_size but for clarity left like this
-        y = y + step_size * differential_equation(x) # Calculate our y value
+    if verbose:
+        for i in range(1, steps + 1):
+            x = x + ss # Update the x value; can be x += step_size but for clarity left like this
+            y = y + ss * de(x) # Calculate our y value
 
-        # Add them to the lists
-        solution_x_values.append(x)
-        solution_y_values.append(y)
+            # Add them to the lists
+            solution_x_values[i] = x
+            solution_y_values[i] = y
 
-        if verbose:
+            # Verbose
             print(f"x: {x:.4f}, y: {y:.6f}")
+    else:
+        for i in range(1, steps + 1):
+            x = x + ss
+            y = y + ss * de(x)
+            solution_x_values[i] = x
+            solution_y_values[i] = y
 
     # Plot the trajectory if we want it
     if plot_trajectory:
@@ -86,11 +106,22 @@ def eulers_method(
             title_color = 'black'
             color = 'black'
         
-        plt.plot(solution_x_values, solution_y_values, marker='o', linestyle='-', color=color, label='Euler\'s Method')
-        plt.title('Trajectory of y as a Function of x Using Euler\'s Method', color = title_color)
-        plt.xlabel('x')
-        plt.ylabel('y')
-        plt.grid(True)
+        plt.plot(solution_x_values, solution_y_values, marker='o', linestyle='-', color=color)
+        plt.xlabel('x', fontsize=24)
+        plt.ylabel('y', fontsize=24)
+
+        # Title, if given then use that otherwise automatic one
+        if title:
+            plt.title(title, pad = 15, color = title_color, fontsize=28)
+        else:
+            title = f"Trajectory of {axes_labels[1]} as a Function of {axes_labels[0]} Using Euler\'s Method"
+            plt.title(title, pad = 15, color = title_color, fontsize=28)
+        
+        plt.gca().spines['top'].set_visible(False)
+        plt.gca().spines['right'].set_visible(False)
+        plt.xticks(fontsize=18)
+        plt.yticks(fontsize=18)
+        plt.grid(grid)
         plt.show()
 
     return solution_x_values, solution_y_values
@@ -139,41 +170,44 @@ def plot_vector_field(
     '''
     try:
         # Grid
-        x, y = np.meshgrid(np.linspace(x_grid[0], x_grid[1], plot_points),
-                        np.linspace(y_grid[0], y_grid[1], plot_points))
+        x = np.linspace(x_grid[0], x_grid[1], plot_points)
+        y = np.linspace(y_grid[0], y_grid[1], plot_points)
+        X, Y = np.meshgrid(x, y, indexing="ij")  # Optimized indexing
 
         # Equations to plot
-        u, v = vector_field_functions(x, y)
+        u, v = vector_field_functions(X, Y)
 
         # Set plot style
         plt.style.use('dark_background' if dark_mode else 'default')
         title_color = 'white' if dark_mode else 'black'
 
         # To still be able to see the vectors with these exact conditions
-        if not vector_colour:
-            vector_colour = 'black' if dark_mode or gradient else 'white'
+        vector_colour = vector_colour or ('black' if dark_mode or gradient else 'white')
 
         # Gradient plot
         if gradient == True:
-            c = plt.imshow(abs(u) + abs(v), extent=(x_grid[0], x_grid[1], y_grid[0], y_grid[1]), interpolation='none', origin='lower')
+            magnitude = np.hypot(u, v)
+            c = plt.imshow(magnitude, extent=(x_grid[0], x_grid[1], y_grid[0], y_grid[1]), interpolation='none', origin='lower')
             colorbar = plt.colorbar(c)
-            colorbar.set_label('Relative length of vector', rotation=270, labelpad = 20)
+            colorbar.set_label('Relative length of vector', rotation=270, labelpad = 20, fontsize=14)
 
         # Plot
         plt.quiver(x, y, u, v, color = vector_colour)
-        plt.xlabel(axes_labels[0])
-        plt.ylabel(axes_labels[1])
+        plt.xlabel(axes_labels[0], fontsize=24)
+        plt.ylabel(axes_labels[1], fontsize=24)
 
         # Title, if given then use that otherwise automatic one
         if title:
-            plt.title(title, pad = 15, color = title_color)
+            plt.title(title, pad = 15, color = title_color, fontsize=28)
         else:
             title = f"2D vector field superimposed on {axes_labels[0]}-{axes_labels[1]} state space"
-            plt.title(title, pad = 15, color = title_color)
+            plt.title(title, pad = 15, color = title_color, fontsize=28)
         
-        plt.grid(grid) # Plots the grid if set to True
-        plt.tight_layout()
-        plt.gca().set_aspect('equal')
+        plt.gca().spines['top'].set_visible(False)
+        plt.gca().spines['right'].set_visible(False)
+        plt.xticks(fontsize=14)
+        plt.yticks(fontsize=14)
+        plt.grid(grid)
         
         if show == True:
             plt.show()
@@ -270,9 +304,9 @@ def plot_3d_vector_field(
         else:
             ax.set_title('', pad=15, color=title_color)
 
-        ax.set_xlabel(axes_labels[0])
-        ax.set_ylabel(axes_labels[1])
-        ax.set_zlabel(axes_labels[2])
+        ax.set_xlabel(axes_labels[0], fontsize=24)
+        ax.set_ylabel(axes_labels[1], fontsize=24)
+        ax.set_zlabel(axes_labels[2], fontsize=24)
 
         # These remove the background color of the plot axes
         ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
@@ -292,6 +326,7 @@ def plot_trajectories(
         start: float,
         stop: float,
         step_size: float,
+        initial_state: list,
         vector_field: bool = True,
         params: list = [],
         axes_labels: Tuple[str, str] = ('x','y'),
@@ -310,7 +345,8 @@ def plot_trajectories(
         equations Callable[[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray]]: Function representing the two equations.
         start (float): starting value for the trajectory (time value).
         stop (float): end value for the trajectory (time value).
-        step_size (float): size of the step we take for odeint function (comparable to Euler's step size)
+        step_size (float): size of the step we take for odeint function (comparable to Euler's step size).
+        initial_state (list): where the trajectory starts.
         vector_field (bool, optional): sets t.
         params (list, optional):
         axes_labels(Tuple[str, str], optional): If given, the axes labels for the x and y axes. Defaults to "x" and "y".
@@ -342,7 +378,7 @@ def plot_trajectories(
 
         initial_state = [100, 30] # Starting points for x and y, in this case Shark and Tuna populations
 
-        plot_trajectories(equations, 0, 40, 0.01, params=p)
+        plot_trajectories(equations, 0, 40, 0.01, initial_state=initial_state, params=p)
     '''
     try:
         # If gradient_trajectory is set to True, gradient is turned off for readability
